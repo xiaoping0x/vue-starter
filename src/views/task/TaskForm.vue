@@ -1,7 +1,5 @@
 <template>
 <Form ref="form" :model="formModel" :label-width="80">
-  <p class="error" v-if="taskError">Error: {{ taskError.response.data.message }}</p>
-
   <FormItem label="标题" prop="name">
     <Input type="text" :disabled="hasSubmit" v-model="formModel.title"></Input>
   </FormItem>
@@ -31,6 +29,15 @@
 <script>
 import { mapActions, mapState } from 'vuex';
 
+function setFormError(form, prop, message) {
+  const fieldItem = form.fields.find(field => field.prop === prop);
+
+  if (fieldItem != null) {
+    fieldItem.validateState = 'error';
+    fieldItem.validateMessage = message;
+  }
+}
+
 export default {
   props: {
     isUpdate: {
@@ -50,6 +57,11 @@ export default {
           {
             required: true,
             trigger: 'blur',
+          },
+        ],
+        status: [
+          {
+            trigger: 'change',
           },
         ],
       },
@@ -83,16 +95,35 @@ export default {
     },
     doSubmit() {
       const model = Object.assign({}, this.formModel);
-      delete model.__v;
-      delete model._id;
 
       // 更新成功后需要能够跳转到页面，或者显示报错信息
       // valid=0表示错误，提示message错误信息 this.$Message('error');
       if (this.isUpdate) {
-        this.updateTaskById(model);
+        this.updateTaskById(model).then(res => {
+          this.$router.push({ name: 'tasks/list' })
+        }).catch(err => {
+          console.error('update error', err);
+          const resData = err.response.data;
+
+          if (!resData.valid) {
+            setFormError(this.$refs.form, resData.param, resData.message);
+          } else {
+            this.$Message.error(resData.message);
+          }
+        });
       } else {
         this.createTask({
           data: model,
+        }).then(res => {
+          this.$router.push({ name: 'tasks/detail', params: { id: res.data.id } })
+        }).catch(err => {
+          const resData = err.response.data;
+
+          if (!resData.valid) {
+            console.error('set form errors from server', resData);
+          }
+
+          this.$Message.error(resData.message);
         });
       }
     }
